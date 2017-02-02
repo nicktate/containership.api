@@ -6,6 +6,7 @@ module.exports = {
     cluster: require('./cluster'),
     host: require('./host'),
     hosts: require('./hosts'),
+    plugins: require('./plugins'),
     variable: require('./variable'),
     variables: require('./variables')
 };
