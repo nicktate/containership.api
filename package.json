@@ -22,7 +22,8 @@
     "body-parser": "^1.4.3",
     "express": "^4.2.0",
     "ip": "^1.1.4",
-    "lodash": "4.17.2"
+    "lodash": "4.17.2",
+    "node-uuid": "^1.4.7"
   },
   "devDependencies": {
     "eslint": "^3.3.1",

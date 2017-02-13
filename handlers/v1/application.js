@@ -2,6 +2,7 @@
 
 const _ = require('lodash');
 const async = require('async');
+const uuid = require('node-uuid');
 
 const health_check_defaults = {
     interval: 15000,
@@ -72,6 +73,7 @@ module.exports = {
                     // set health check defaults
                     config.health_checks = _.map(config.health_checks, (health_check) => {
                         health_check = _.defaults(health_check, health_check_defaults);
+                        health_check.id = uuid.v4();
 
                         if(health_check.type === 'http' && !health_check.path) {
                             health_check.path = '/';
@@ -108,14 +110,12 @@ module.exports = {
     // update application
     update(req, res, next) {
         const core = req.core;
-        return core.cluster.myriad.persistence.keys(core.constants.myriad.APPLICATIONS, (err, applications) => {
-            if(err) {
-                res.stash.code = 500;
-                return next();
-            }
-
-            if(!_.includes(applications, [core.constants.myriad.APPLICATION_PREFIX, req.params.application].join(core.constants.myriad.DELIMITER))) {
+        return core.cluster.myriad.persistence.get([core.constants.myriad.APPLICATION_PREFIX, req.params.application].join(core.constants.myriad.DELIMITER), (err, application) => {
+            if(err && err.name == core.constants.myriad.ENOKEY) {
                 res.stash.code = 404;
+                return next();
+            } else if(err) {
+                res.stash.code = 500;
                 return next();
             }
 
@@ -139,22 +139,40 @@ module.exports = {
                 body.env_vars = req.body.env_vars;
             }
             if(_.has(req.body, 'health_checks')) {
-                body.health_checks = req.body.health_checks;
+                const health_checks = [];
 
-                // set health check defaults
-                body.health_checks = _.map(body.health_checks, (health_check) => {
-                    health_check = _.defaults(health_check, health_check_defaults);
+                try {
+                    application = JSON.parse(application);
+                    const application_health_checks = _.keyBy(application.health_checks, 'id');
 
-                    if(health_check.type === 'http' && !health_check.path) {
-                        health_check.path = '/';
-                    }
+                    // set health check defaults
+                    _.each(req.body.health_checks, (health_check) => {
+                        if(health_check.id && !application_health_checks[health_check.id]) {
+                            return;
+                        }
 
-                    if(health_check.type === 'http' && !health_check.status_code) {
-                        health_check.status_code = 200;
-                    }
+                        health_check = _.defaults(health_check, health_check_defaults);
 
-                    return health_check;
-                });
+                        if(health_check.type === 'http' && !health_check.path) {
+                            health_check.path = '/';
+                        }
+
+                        if(health_check.type === 'http' && !health_check.status_code) {
+                            health_check.status_code = 200;
+                        }
+
+                        if(!health_check.id) {
+                            health_check.id = uuid.v4();
+                        }
+
+                        health_checks.push(health_check);
+                    });
+
+                    body.health_checks = health_checks;
+                } catch(err) {
+                    res.stash.code = 500;
+                    return next();
+                }
             }
             if(_.has(req.body, 'image')) {
                 body.image = req.body.image;
